@@ -6,44 +6,12 @@ import (
 	"net/http"
 	"os"
 	"strings"
-	"time"
 
-	"database/sql"
 	"github.com/fiatjaf/eventstore/sqlite3"
 	"github.com/fiatjaf/khatru"
-	_ "github.com/mattn/go-sqlite3"
+	_ "github.com/joho/godotenv/autoload"
 	"github.com/nbd-wtf/go-nostr"
 )
-
-func execSql(db *sql.DB, sql string) {
-	_, err := db.Exec(sql)
-	if err != nil {
-		panic(err)
-	}
-}
-
-func getDb() *sql.DB {
-	db, err := sql.Open("sqlite3", "/tmp/smoxy-people.sqlite")
-	if err != nil {
-		panic(err)
-	}
-
-	execSql(db, `
-  	CREATE TABLE IF NOT EXISTS kind3 (
-    	pubkey TEXT PRIMARY KEY,
-      event TEXT
-  	);`,
-	)
-
-	execSql(db, `
-  	CREATE TABLE IF NOT EXISTS kind10003 (
-    	pubkey TEXT PRIMARY KEY,
-      event TEXT
-  	);`,
-	)
-
-	return db
-}
 
 func getEnv() func(k string, fallback ...string) (v string) {
 	var env = make(map[string]string)
@@ -64,88 +32,35 @@ func getEnv() func(k string, fallback ...string) (v string) {
 	}
 }
 
-type UserData struct {
-	Kind3     *nostr.Event
-	Kind10002 *nostr.Event
-}
-
-var users = make(map[string]UserData)
-
-func selectLatestEvent(a *nostr.Event, b *nostr.Event) *nostr.Event {
-	if a == nil {
-		return b
-	}
-
-	if b == nil {
-		return a
-	}
-
-	if a.CreatedAt > b.CreatedAt {
-		return a
-	} else {
-		return b
-	}
-}
-
-func loadUserData(pubkey string) {
-	// Set this so we don't try to fetch user data multiple times
-	users[pubkey] = UserData{}
-
-	ctx := context.Background()
-	relay, err := nostr.RelayConnect(ctx, "wss://purplepag.es")
-	if err != nil {
-		panic(err)
-	}
-
-	var filters = []nostr.Filter{{
-		Kinds:   []int{3, 10002},
-		Authors: []string{pubkey},
-		Limit:   10,
-	}}
-
-	ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
-	defer cancel()
-
-	sub, err := relay.Subscribe(ctx, filters)
-	if err != nil {
-		panic(err)
-	}
-
-	var kind3 *nostr.Event
-	var kind10002 *nostr.Event
-
-	for ev := range sub.Events {
-		if ev.Kind == 3 {
-			kind3 = selectLatestEvent(kind3, ev)
-		}
-
-		if ev.Kind == 10002 {
-			kind10002 = selectLatestEvent(kind10002, ev)
-		}
-	}
-
-	users[pubkey] = UserData{kind3, kind10002}
-}
+var whitelist = make(map[string]bool)
 
 func checkAuth(ctx context.Context) (reject bool, msg string) {
 	pubkey := khatru.GetAuthed(ctx)
 
 	if pubkey == "" {
-		return true, "auth-required: need to know who you are to proxy successfully"
+		return true, "auth-required: authentication is required for access"
 	}
 
-	if _, ok := users[pubkey]; !ok {
-		loadUserData(pubkey)
+	if _, ok := whitelist[pubkey]; !ok {
+		res, err := http.Get(fmt.Sprintf("%s%s", env("AUTH_BACKEND"), pubkey))
+		if err != nil {
+			panic(err)
+		}
+
+		whitelist[pubkey] = res.StatusCode == 200
+	}
+
+	if !whitelist[pubkey] {
+		return true, "restricted: access denied"
 	}
 
 	return false, ""
 }
 
-func main() {
-	db := getDb()
-	defer db.Close()
+var env func(k string, fallback ...string) (v string)
 
-	env := getEnv()
+func main() {
+	env = getEnv()
 
 	relay := khatru.NewRelay()
 	relay.Info.Name = env("RELAY_NAME")
@@ -153,7 +68,7 @@ func main() {
 	relay.Info.PubKey = env("RELAY_PUBKEY")
 	relay.Info.Description = env("RELAY_DESCRIPTION")
 
-	backend := sqlite3.SQLite3Backend{DatabaseURL: "/tmp/smoxy-relay.sqlite"}
+	backend := sqlite3.SQLite3Backend{DatabaseURL: "/tmp/grail-relay.sqlite"}
 	if err := backend.Init(); err != nil {
 		panic(err)
 	}
