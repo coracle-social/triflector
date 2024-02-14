@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -21,8 +22,12 @@ type BackendAccess struct {
 }
 
 var backend_acl = make(map[string]BackendAccess)
+var backend_acl_mu sync.Mutex
 
 func checkAuthUsingBackend(pubkey string) bool {
+	backend_acl_mu.Lock()
+	defer backend_acl_mu.Unlock()
+
 	url := env("AUTH_BACKEND")
 
 	// If we don't have a backend, we're done
@@ -54,9 +59,12 @@ func checkAuthUsingBackend(pubkey string) bool {
 }
 
 var shared_keys = make(map[string]string)
-var shared_keys_last_sync = time.Unix(0, 0)
+var shared_keys_mu sync.RWMutex
 
 func handleSharedKeyEvent(e *nostr.Event) {
+	shared_keys_mu.Lock()
+	defer shared_keys_mu.Unlock()
+
 	shared_sk := e.Tags.GetFirst([]string{"privkey"}).Value()
 
 	if shared_sk != "" {
@@ -77,11 +85,9 @@ func syncSharedKeys() {
 	}
 
 	for _, query := range relay.QueryEvents {
-		since := nostr.Timestamp(shared_keys_last_sync.Unix())
 		ch, err := query(context.Background(), nostr.Filter{
 			Tags:  nostr.TagMap{"#p": []string{pk}},
 			Kinds: []int{1059, 1060},
-			Since: &since,
 		})
 
 		if err != nil {
@@ -102,13 +108,22 @@ func syncSharedKeys() {
 }
 
 var member_list_acl = make(map[string]bool)
+var member_list_acl_mu sync.RWMutex
 var latest_member_list = time.Unix(0, 0)
+var latest_member_list_mu sync.RWMutex
 
 func checkAuthUsingMemberList(pubkey string) bool {
+	member_list_acl_mu.RLock()
+	defer member_list_acl_mu.RUnlock()
 	return member_list_acl[pubkey]
 }
 
 func handleMemberListEvent(e *nostr.Event) {
+	member_list_acl_mu.Lock()
+	defer member_list_acl_mu.Unlock()
+	latest_member_list_mu.Lock()
+	defer latest_member_list_mu.Unlock()
+
 	created_at := e.CreatedAt.Time()
 
 	if created_at.After(latest_member_list) {
@@ -127,6 +142,11 @@ func handleMemberListEvent(e *nostr.Event) {
 }
 
 func syncMemberList() {
+	shared_keys_mu.RLock()
+	defer shared_keys_mu.RUnlock()
+	latest_member_list_mu.RLock()
+	defer latest_member_list_mu.RUnlock()
+
 	for _, query := range relay.QueryEvents {
 		since := nostr.Timestamp(latest_member_list.Unix())
 		ch, err := query(context.Background(), nostr.Filter{
