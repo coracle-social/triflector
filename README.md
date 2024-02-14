@@ -1,6 +1,6 @@
 # Triflector
 
-This is a relay implemented using [Khatru](https://github.com/fiatjaf/khatru) which implements a range of access controls.
+This is a relay based on [Khatru](https://github.com/fiatjaf/khatru) which implements a range of access controls.
 
 ## Basic configuration
 

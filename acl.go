@@ -56,6 +56,18 @@ func checkAuthUsingBackend(pubkey string) bool {
 var shared_keys = make(map[string]string)
 var shared_keys_last_sync = time.Unix(0, 0)
 
+func handleSharedKeyEvent(e *nostr.Event) {
+	shared_sk := e.Tags.GetFirst([]string{"privkey"}).Value()
+
+	if shared_sk != "" {
+		shared_pk, err := nostr.GetPublicKey(shared_sk)
+
+		if err == nil {
+			shared_keys[shared_pk] = shared_sk
+		}
+	}
+}
+
 func syncSharedKeys() {
 	sk := env("RELAY_PRIVATE_KEY")
 	pk, err := nostr.GetPublicKey(sk)
@@ -83,30 +95,40 @@ func syncSharedKeys() {
 			if err != nil {
 				fmt.Printf("%+v", err)
 			} else if rumor.Kind == 24 {
-				shared_sk := rumor.Tags.GetFirst([]string{"privkey"}).Value()
-
-				if shared_sk != "" {
-					shared_pk, err := nostr.GetPublicKey(shared_sk)
-
-					if err == nil {
-						shared_keys[shared_pk] = shared_sk
-					}
-				}
+				handleSharedKeyEvent(rumor)
 			}
 		}
 	}
 }
 
 var member_list_acl = make(map[string]bool)
-var member_list_last_sync = time.Unix(0, 0)
+var latest_member_list = time.Unix(0, 0)
 
 func checkAuthUsingMemberList(pubkey string) bool {
 	return member_list_acl[pubkey]
 }
 
+func handleMemberListEvent(e *nostr.Event) {
+	created_at := e.CreatedAt.Time()
+
+	if created_at.After(latest_member_list) {
+		latest_member_list = created_at
+
+		op := e.Tags.GetFirst([]string{"op"}).Value()
+
+		if op == "set" {
+			member_list_acl = make(map[string]bool)
+		}
+
+		for _, tag := range e.Tags.GetAll([]string{"p"}) {
+			member_list_acl[tag.Value()] = op != "remove"
+		}
+	}
+}
+
 func syncMemberList() {
 	for _, query := range relay.QueryEvents {
-		since := nostr.Timestamp(member_list_last_sync.Unix())
+		since := nostr.Timestamp(latest_member_list.Unix())
 		ch, err := query(context.Background(), nostr.Filter{
 			Tags:  nostr.TagMap{"#p": keys(shared_keys)},
 			Kinds: []int{1059, 1060},
@@ -117,8 +139,6 @@ func syncMemberList() {
 			fmt.Printf("%+v", err)
 			continue
 		}
-
-		member_list_last_sync = time.Now()
 
 		var events []*nostr.Event
 		for e := range ch {
@@ -136,15 +156,7 @@ func syncMemberList() {
 			if err != nil {
 				fmt.Printf("%+v", err)
 			} else if rumor.Kind == 27 {
-				op := rumor.Tags.GetFirst([]string{"op"}).Value()
-
-				if op == "set" {
-					member_list_acl = make(map[string]bool)
-				}
-
-				for _, tag := range rumor.Tags.GetAll([]string{"p"}) {
-					member_list_acl[tag.Value()] = op != "remove"
-				}
+				handleMemberListEvent(rumor)
 			}
 		}
 	}

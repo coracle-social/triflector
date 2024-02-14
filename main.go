@@ -39,7 +39,8 @@ var env func(k string, fallback ...string) (v string)
 func main() {
 	env = getEnv()
 
-	relay_pubkey, err := nostr.GetPublicKey(env("RELAY_PRIVATE_KEY"))
+	relay_privkey := env("RELAY_PRIVATE_KEY")
+	relay_pubkey, err := nostr.GetPublicKey(relay_privkey)
 
 	if err != nil {
 		fmt.Println("A valid hex RELAY_PRIVATE_KEY is required")
@@ -59,7 +60,28 @@ func main() {
 	relay.StoreEvent = append(relay.StoreEvent, backend.SaveEvent)
 	relay.StoreEvent = append(relay.StoreEvent,
 		func(ctx context.Context, event *nostr.Event) error {
-			return backend.SaveEvent(ctx, event)
+			pk := event.Tags.GetFirst([]string{"p"}).Value()
+
+			var sk string
+			if pk == relay_pubkey {
+				sk = relay_privkey
+			} else if shared_sk, ok := shared_keys[pk]; ok {
+				sk = shared_sk
+			}
+
+			if sk != "" {
+				rumor, err := getRumor(sk, event)
+
+				if err != nil {
+					return err
+				} else if rumor.Kind == 24 {
+					handleSharedKeyEvent(rumor)
+				} else if rumor.Kind == 27 {
+					handleMemberListEvent(rumor)
+				}
+			}
+
+			return nil
 		},
 	)
 

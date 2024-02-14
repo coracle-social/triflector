@@ -1,1 +1,2 @@
 - [ ] Instead of polling, update keys/member list as events are published
+- [ ] Support multiple groups? For the platform case
