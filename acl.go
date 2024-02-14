@@ -10,9 +10,9 @@ import (
 	"time"
 )
 
-func checkAuthUsingGroupId(pubkey string) bool {
+func checkAuthUsingEnv(pubkey string) bool {
 	// Group admin can always access the group relay
-	return strings.Contains(env("AUTH_GROUP_ID"), pubkey)
+	return strings.Contains(env("PUBKEY_WHITELIST"), pubkey)
 }
 
 type BackendAccess struct {
@@ -57,7 +57,7 @@ var shared_keys = make(map[string]string)
 var shared_keys_last_sync = time.Unix(0, 0)
 
 func syncSharedKeys() {
-	sk := env("AUTH_GROUP_KEY")
+	sk := env("RELAY_PRIVATE_KEY")
 	pk, err := nostr.GetPublicKey(sk)
 
 	if err != nil {
@@ -151,15 +151,11 @@ func syncMemberList() {
 }
 
 func keepMemberListInSync() {
-	if env("AUTH_GROUP_KEY") != "" {
+	syncSharedKeys()
+	syncMemberList()
+
+	for range time.Tick(time.Minute * 5) {
 		syncSharedKeys()
 		syncMemberList()
-
-		fmt.Println(member_list_acl)
-
-		for range time.Tick(time.Minute * 5) {
-			syncSharedKeys()
-			syncMemberList()
-		}
 	}
 }

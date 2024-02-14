@@ -18,7 +18,7 @@ func checkAuth(ctx context.Context) (reject bool, msg string) {
 		return true, "auth-required: authentication is required for access"
 	}
 
-	if checkAuthUsingGroupId(pubkey) {
+	if checkAuthUsingEnv(pubkey) {
 		return false, ""
 	}
 
@@ -39,13 +39,19 @@ var env func(k string, fallback ...string) (v string)
 func main() {
 	env = getEnv()
 
+	relay_pubkey, err := nostr.GetPublicKey(env("RELAY_PRIVATE_KEY"))
+
+	if err != nil {
+		fmt.Println("A valid hex RELAY_PRIVATE_KEY is required")
+	}
+
 	relay = khatru.NewRelay()
+	relay.Info.PubKey = relay_pubkey
 	relay.Info.Name = env("RELAY_NAME")
 	relay.Info.Icon = env("RELAY_ICON")
-	relay.Info.PubKey = env("RELAY_PUBKEY")
 	relay.Info.Description = env("RELAY_DESCRIPTION")
 
-	backend := sqlite3.SQLite3Backend{DatabaseURL: "/tmp/grail-relay.sqlite"}
+	backend := sqlite3.SQLite3Backend{DatabaseURL: "/tmp/triflector-relay.sqlite"}
 	if err := backend.Init(); err != nil {
 		panic(err)
 	}
