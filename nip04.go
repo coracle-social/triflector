@@ -3,6 +3,7 @@ package main
 import (
 	"crypto/sha256"
 	"encoding/json"
+	"sync"
 
 	"github.com/nbd-wtf/go-nostr"
 	"github.com/nbd-wtf/go-nostr/nip04"
@@ -10,8 +11,12 @@ import (
 )
 
 var nip04_conversation_keys = make(map[[32]byte][]byte)
+var nip04_conversation_keys_mu sync.Mutex
 
 func getNip04ConversationKey(sk string, pk string) ([]byte, error) {
+	nip04_conversation_keys_mu.Lock()
+	defer nip04_conversation_keys_mu.Unlock()
+
 	cache_key := sha256.Sum256([]byte(sk + pk))
 
 	if key, ok := nip04_conversation_keys[cache_key]; ok {

@@ -14,6 +14,8 @@ The following environment variables are optional:
 - `RELAY_NAME` - the name of your relay
 - `RELAY_ICON` - an icon for your relay
 - `RELAY_DESCRIPTION` - your relay's description
+- `PUBKEY_WHITELIST` - a comma-separate list of pubkeys to allow access for
+- `AUTH_BACKEND` - a url to delegate authorization to
 
 ## Access control
 
@@ -37,7 +39,9 @@ Triflector supports access controls based on [NIP 87](https://github.com/nostr-p
 
 To set this up, a few things need to be done:
 
-- Add your relay's url to your group's relay list
-- Add your relay's public key to your group's member list
+- Authorize group admins using another access control method so that they can publish events, even when the relay has an empty database. This is needed to bootstrap the relay's group-based access control.
+- Add your relay's url to your group's relay list. This tells clients to use your relay to read and write group events.
+- Add your relay's public key to your group's member list. This allows your relay to receive shared keys and decrypt group events.
+- Publish a kind 10002 using your relay's key pointing to your relay's url (to make sure clients using the outbox model correctly deliver messages to your relay).
 
 Once a shared key has been published to your Triflector instance, the relay will decrypt any invitations addressed to the relay's pubkey in order to access the shared private keys. Then, using these keys the relay will decrypt all messages, searching for `kind 27` member list events. Any member included in the member list will then be allowed to read and write from your relay.

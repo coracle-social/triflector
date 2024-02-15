@@ -57,9 +57,11 @@ func main() {
 		panic(err)
 	}
 
-	relay.StoreEvent = append(relay.StoreEvent, backend.SaveEvent)
+	// relay.StoreEvent = append(relay.StoreEvent, backend.SaveEvent)
 	relay.StoreEvent = append(relay.StoreEvent,
 		func(ctx context.Context, event *nostr.Event) error {
+			shared_keys_mu.RLock()
+
 			pk := event.Tags.GetFirst([]string{"p"}).Value()
 
 			var sk string
@@ -69,8 +71,11 @@ func main() {
 				sk = shared_sk
 			}
 
+			shared_keys_mu.RUnlock()
+
 			if sk != "" {
 				rumor, err := getRumor(sk, event)
+				fmt.Println(event.Kind, rumor, err)
 
 				if err != nil {
 					return err
