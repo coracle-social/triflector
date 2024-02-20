@@ -4,8 +4,6 @@ import (
 	"context"
 	"fmt"
 	"net/http"
-	"slices"
-	"strings"
 
 	"github.com/fiatjaf/eventstore/sqlite3"
 	"github.com/fiatjaf/khatru"
@@ -44,10 +42,11 @@ func migrate(db *sqlx.DB) {
 	db.MustExec(`
     CREATE TABLE IF NOT EXISTS claim (
       pubkey string NOT NULL,
-      claim string NOT NULL
+      claim string NOT NULL,
+      type string NOT NULL
     );
 
-    CREATE UNIQUE INDEX IF NOT EXISTS claim__pubkey_claim ON claim (pubkey, claim);
+    CREATE UNIQUE INDEX IF NOT EXISTS claim__pubkey_claim ON claim (pubkey, claim, type);
   `)
 }
 
@@ -58,17 +57,16 @@ var env func(k string, fallback ...string) (v string)
 func main() {
 	env = getEnv()
 
-	relay_privkey := env("RELAY_PRIVATE_KEY")
-	relay_pubkey, err := nostr.GetPublicKey(relay_privkey)
+	group_admin_sk := env("GROUP_ADMIN_SK")
+	group_admin_pk, _ := nostr.GetPublicKey(group_admin_sk)
 
-	if err != nil {
-		fmt.Println("A valid hex RELAY_PRIVATE_KEY is required")
-	}
+	group_member_sk := env("GROUP_MEMBER_SK")
+	group_member_pk, _ := nostr.GetPublicKey(group_member_sk)
 
 	relay = khatru.NewRelay()
-	relay.Info.PubKey = relay_pubkey
 	relay.Info.Name = env("RELAY_NAME")
 	relay.Info.Icon = env("RELAY_ICON")
+	relay.Info.PubKey = env("RELAY_PUBKEY")
 	relay.Info.Description = env("RELAY_DESCRIPTION")
 
 	backend = sqlite3.SQLite3Backend{DatabaseURL: "./relay.db"}
@@ -79,39 +77,6 @@ func main() {
 	migrate(backend.DB)
 
 	relay.StoreEvent = append(relay.StoreEvent, backend.SaveEvent)
-	relay.StoreEvent = append(relay.StoreEvent,
-		func(ctx context.Context, event *nostr.Event) error {
-			shared_keys_mu.RLock()
-
-			if event.Kind == 1059 || event.Kind == 1060 {
-				pk := event.Tags.GetFirst([]string{"p"}).Value()
-
-				var sk string
-				if pk == relay_pubkey {
-					sk = relay_privkey
-				} else if shared_sk, ok := shared_keys[pk]; ok {
-					sk = shared_sk
-				}
-
-				shared_keys_mu.RUnlock()
-
-				if sk != "" {
-					rumor, err := getRumor(sk, event)
-					fmt.Println(event.Kind, rumor, err)
-
-					if err != nil {
-						return err
-					} else if rumor.Kind == 24 {
-						handleSharedKeyEvent(rumor)
-					} else if rumor.Kind == 27 {
-						handleMemberListEvent(rumor)
-					}
-				}
-			}
-
-			return nil
-		},
-	)
 
 	relay.DeleteEvent = append(relay.DeleteEvent, backend.DeleteEvent)
 
@@ -120,23 +85,39 @@ func main() {
 	relay.RejectEvent = append(relay.RejectEvent,
 		func(ctx context.Context, event *nostr.Event) (reject bool, msg string) {
 			if event.Kind == 28934 {
-				tag := event.Tags.GetFirst([]string{"claim"})
-				if tag == nil {
-					return true, "access-denied: no claim provided"
+				handleRelayAccessRequest(event)
+			}
+
+			if tag := event.Tags.GetFirst([]string{"p"}); tag != nil && (event.Kind == 1059 || event.Kind == 1060) {
+				pk := tag.Value()
+
+				var sk string
+				if pk == group_member_pk {
+					sk = group_member_sk
+				} else if pk == group_admin_pk {
+					sk = group_admin_sk
+				} else {
+					shared_keys_mu.RLock()
+
+					if shared_sk, ok := shared_keys[pk]; ok {
+						sk = shared_sk
+					}
+
+					shared_keys_mu.RUnlock()
 				}
 
-				claims := strings.Split(env("RELAY_CLAIMS"), ",")
+				if sk != "" {
+					rumor, err := getRumor(sk, event)
 
-				if slices.Contains(claims, tag.Value()) {
-					backend.DB.MustExec(
-						"INSERT INTO claim (pubkey, claim) VALUES ($1, $2) ON CONFLICT DO NOTHING",
-						event.PubKey,
-						tag.Value(),
-					)
-
-					return false, "access-granted: claim accepted"
-				} else {
-					return true, "access-denied: invalid claim"
+					if err != nil {
+						fmt.Println(err)
+					} else if rumor.Kind == 24 {
+						handleSharedKeyEvent(rumor)
+					} else if rumor.Kind == 25 {
+						handleGroupAccessRequest(rumor)
+					} else if rumor.Kind == 27 {
+						handleMemberListEvent(rumor)
+					}
 				}
 			}
 

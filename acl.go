@@ -14,13 +14,14 @@ import (
 
 func checkAuthUsingEnv(pubkey string) bool {
 	// Group admin can always access the group relay
-	return strings.Contains(env("PUBKEY_WHITELIST"), pubkey)
+	return strings.Contains(env("AUTH_WHITELIST"), pubkey)
 }
 
 func checkAuthUsingClaim(pubkey string) bool {
 	var claim string
 
 	err := backend.DB.Get(&claim, "SELECT claim FROM claim WHERE pubkey = $1", pubkey)
+
 	if err != nil {
 		fmt.Println(err)
 	}
@@ -70,6 +71,37 @@ func checkAuthUsingBackend(pubkey string) bool {
 	return backend_acl[pubkey].granted
 }
 
+func handleAccessRequest(e *nostr.Event, claims []string, claim_type string) {
+	tag := e.Tags.GetFirst([]string{"claim"})
+
+	if tag == nil {
+		return
+	}
+
+	if !slices.Contains(claims, tag.Value()) {
+		return
+	}
+
+	backend.DB.MustExec(
+		"INSERT INTO claim (pubkey, claim, type) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING",
+		e.PubKey,
+		tag.Value(),
+		claim_type,
+	)
+}
+
+func handleRelayAccessRequest(e *nostr.Event) {
+	claims := strings.Split(env("RELAY_CLAIMS"), ",")
+
+	handleAccessRequest(e, claims, "relay")
+}
+
+func handleGroupAccessRequest(e *nostr.Event) {
+	claims := strings.Split(env("GROUP_CLAIMS"), ",")
+
+	handleAccessRequest(e, claims, "group")
+}
+
 var shared_keys = make(map[string]string)
 var shared_keys_mu sync.RWMutex
 
@@ -89,7 +121,7 @@ func handleSharedKeyEvent(e *nostr.Event) {
 }
 
 func syncSharedKeys() {
-	sk := env("RELAY_PRIVATE_KEY")
+	sk := env("GROUP_MEMBER_SK")
 	pk, err := nostr.GetPublicKey(sk)
 
 	if err != nil {
