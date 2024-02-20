@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"github.com/nbd-wtf/go-nostr"
 	"net/http"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -14,6 +15,17 @@ import (
 func checkAuthUsingEnv(pubkey string) bool {
 	// Group admin can always access the group relay
 	return strings.Contains(env("PUBKEY_WHITELIST"), pubkey)
+}
+
+func checkAuthUsingClaim(pubkey string) bool {
+	var claim string
+
+	err := backend.DB.Get(&claim, "SELECT claim FROM claim WHERE pubkey = $1", pubkey)
+	if err != nil {
+		fmt.Println(err)
+	}
+
+	return slices.Contains(strings.Split(env("RELAY_CLAIMS"), ","), claim)
 }
 
 type BackendAccess struct {

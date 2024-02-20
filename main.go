@@ -4,9 +4,12 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"slices"
+	"strings"
 
 	"github.com/fiatjaf/eventstore/sqlite3"
 	"github.com/fiatjaf/khatru"
+	"github.com/jmoiron/sqlx"
 	_ "github.com/joho/godotenv/autoload"
 	"github.com/nbd-wtf/go-nostr"
 )
@@ -22,6 +25,10 @@ func checkAuth(ctx context.Context) (reject bool, msg string) {
 		return false, ""
 	}
 
+	if checkAuthUsingClaim(pubkey) {
+		return false, ""
+	}
+
 	if checkAuthUsingBackend(pubkey) {
 		return false, ""
 	}
@@ -33,7 +40,19 @@ func checkAuth(ctx context.Context) (reject bool, msg string) {
 	return true, "restricted: access denied"
 }
 
+func migrate(db *sqlx.DB) {
+	db.MustExec(`
+    CREATE TABLE IF NOT EXISTS claim (
+      pubkey string NOT NULL,
+      claim string NOT NULL
+    );
+
+    CREATE UNIQUE INDEX IF NOT EXISTS claim__pubkey_claim ON claim (pubkey, claim);
+  `)
+}
+
 var relay *khatru.Relay
+var backend sqlite3.SQLite3Backend
 var env func(k string, fallback ...string) (v string)
 
 func main() {
@@ -52,37 +71,41 @@ func main() {
 	relay.Info.Icon = env("RELAY_ICON")
 	relay.Info.Description = env("RELAY_DESCRIPTION")
 
-	backend := sqlite3.SQLite3Backend{DatabaseURL: "./relay.db"}
+	backend = sqlite3.SQLite3Backend{DatabaseURL: "./relay.db"}
 	if err := backend.Init(); err != nil {
 		panic(err)
 	}
 
-	// relay.StoreEvent = append(relay.StoreEvent, backend.SaveEvent)
+	migrate(backend.DB)
+
+	relay.StoreEvent = append(relay.StoreEvent, backend.SaveEvent)
 	relay.StoreEvent = append(relay.StoreEvent,
 		func(ctx context.Context, event *nostr.Event) error {
 			shared_keys_mu.RLock()
 
-			pk := event.Tags.GetFirst([]string{"p"}).Value()
+			if event.Kind == 1059 || event.Kind == 1060 {
+				pk := event.Tags.GetFirst([]string{"p"}).Value()
 
-			var sk string
-			if pk == relay_pubkey {
-				sk = relay_privkey
-			} else if shared_sk, ok := shared_keys[pk]; ok {
-				sk = shared_sk
-			}
+				var sk string
+				if pk == relay_pubkey {
+					sk = relay_privkey
+				} else if shared_sk, ok := shared_keys[pk]; ok {
+					sk = shared_sk
+				}
 
-			shared_keys_mu.RUnlock()
+				shared_keys_mu.RUnlock()
 
-			if sk != "" {
-				rumor, err := getRumor(sk, event)
-				fmt.Println(event.Kind, rumor, err)
+				if sk != "" {
+					rumor, err := getRumor(sk, event)
+					fmt.Println(event.Kind, rumor, err)
 
-				if err != nil {
-					return err
-				} else if rumor.Kind == 24 {
-					handleSharedKeyEvent(rumor)
-				} else if rumor.Kind == 27 {
-					handleMemberListEvent(rumor)
+					if err != nil {
+						return err
+					} else if rumor.Kind == 24 {
+						handleSharedKeyEvent(rumor)
+					} else if rumor.Kind == 27 {
+						handleMemberListEvent(rumor)
+					}
 				}
 			}
 
@@ -96,6 +119,27 @@ func main() {
 
 	relay.RejectEvent = append(relay.RejectEvent,
 		func(ctx context.Context, event *nostr.Event) (reject bool, msg string) {
+			if event.Kind == 28934 {
+				tag := event.Tags.GetFirst([]string{"claim"})
+				if tag == nil {
+					return true, "access-denied: no claim provided"
+				}
+
+				claims := strings.Split(env("RELAY_CLAIMS"), ",")
+
+				if slices.Contains(claims, tag.Value()) {
+					backend.DB.MustExec(
+						"INSERT INTO claim (pubkey, claim) VALUES ($1, $2) ON CONFLICT DO NOTHING",
+						event.PubKey,
+						tag.Value(),
+					)
+
+					return false, "access-granted: claim accepted"
+				} else {
+					return true, "access-denied: invalid claim"
+				}
+			}
+
 			return checkAuth(ctx)
 		},
 	)
