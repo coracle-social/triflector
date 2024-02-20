@@ -52,7 +52,7 @@ func main() {
 	relay.Info.Icon = env("RELAY_ICON")
 	relay.Info.Description = env("RELAY_DESCRIPTION")
 
-	backend := sqlite3.SQLite3Backend{DatabaseURL: "/tmp/triflector-relay.sqlite"}
+	backend := sqlite3.SQLite3Backend{DatabaseURL: "./relay.db"}
 	if err := backend.Init(); err != nil {
 		panic(err)
 	}

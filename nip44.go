@@ -44,7 +44,7 @@ func getNip44Rumor(sk string, wrap *nostr.Event) (*nostr.Event, error) {
 		return nil, wrap_key_err
 	}
 
-	seal_json, seal_json_err := nip44.Decrypt([]byte(wrap.Content), string(wrap_key))
+	seal_json, seal_json_err := nip44.Decrypt(wrap_key, wrap.Content)
 	if seal_json_err != nil {
 		return nil, errors.Wrap(seal_json_err, "Failed to decrypt nip44 wrapper")
 	}
@@ -59,7 +59,7 @@ func getNip44Rumor(sk string, wrap *nostr.Event) (*nostr.Event, error) {
 		return nil, seal_key_err
 	}
 
-	rumor_json, rumor_json_err := nip44.Decrypt([]byte(seal.Content), string(seal_key))
+	rumor_json, rumor_json_err := nip44.Decrypt(seal_key, seal.Content)
 	if rumor_json_err != nil {
 		return nil, errors.Wrap(rumor_json_err, "Failed to decrypt nip44 seal")
 	}
