@@ -71,15 +71,15 @@ func checkAuthUsingBackend(pubkey string) bool {
 	return backend_acl[pubkey].granted
 }
 
-func handleAccessRequest(e *nostr.Event, claims []string, claim_type string) {
+func handleAccessRequest(e *nostr.Event, claims []string, claim_type string) bool {
 	tag := e.Tags.GetFirst([]string{"claim"})
 
 	if tag == nil {
-		return
+		return false
 	}
 
 	if !slices.Contains(claims, tag.Value()) {
-		return
+		return false
 	}
 
 	backend.DB.MustExec(
@@ -88,18 +88,20 @@ func handleAccessRequest(e *nostr.Event, claims []string, claim_type string) {
 		tag.Value(),
 		claim_type,
 	)
+
+	return true
 }
 
-func handleRelayAccessRequest(e *nostr.Event) {
+func handleRelayAccessRequest(e *nostr.Event) bool {
 	claims := strings.Split(env("RELAY_CLAIMS"), ",")
 
-	handleAccessRequest(e, claims, "relay")
+	return handleAccessRequest(e, claims, "relay")
 }
 
-func handleGroupAccessRequest(e *nostr.Event) {
+func handleGroupAccessRequest(e *nostr.Event) bool {
 	claims := strings.Split(env("GROUP_CLAIMS"), ",")
 
-	handleAccessRequest(e, claims, "group")
+	return handleAccessRequest(e, claims, "group")
 }
 
 var shared_keys = make(map[string]string)
