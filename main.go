@@ -82,22 +82,12 @@ func main() {
 
 	relay.QueryEvents = append(relay.QueryEvents, backend.QueryEvents)
 
-	relay.RejectAuth = append(relay.RejectAuth,
-		func(ctx context.Context, event *nostr.Event, challenge string) (reject bool, msg string) {
-			if handleRelayAccessRequest(event) {
-				return false, ""
-			}
-
-			if event.Tags.GetFirst([]string{"challenge", challenge}) != nil {
-				return false, ""
-			}
-
-			return true, ""
-		},
-	)
-
 	relay.RejectEvent = append(relay.RejectEvent,
 		func(ctx context.Context, event *nostr.Event) (reject bool, msg string) {
+			if event.Kind == 28934 {
+				handleRelayAccessRequest(event)
+			}
+
 			if tag := event.Tags.GetFirst([]string{"p"}); tag != nil && (event.Kind == 1059 || event.Kind == 1060) {
 				pk := tag.Value()
 

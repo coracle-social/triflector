@@ -6,12 +6,6 @@ github.com/btcsuite/btcd/btcec/v2 v2.3.2 h1:5n0X6hX0Zk+6omWcihdYvdAlGf2DfasC0GMf
 github.com/btcsuite/btcd/btcec/v2 v2.3.2/go.mod h1:zYzJ8etWJQIv1Ogk7OzpWjowwOdXY1W/17j2MW85J04=
 github.com/btcsuite/btcd/chaincfg/chainhash v1.0.2 h1:KdUfX2zKommPRa+PD0sWZUyXe9w277ABlgELO7H04IM=
 github.com/btcsuite/btcd/chaincfg/chainhash v1.0.2/go.mod h1:7SFka0XMvUgj3hfZtydOrQY2mwhPclbT2snogU7SQQc=
-github.com/coracle-social/khatru v0.0.0-20240223171839-a745f9132927 h1:xBhC8HELxxDNYcjsSVF4SJVGMcg6RNI5aTyTR692SMo=
-github.com/coracle-social/khatru v0.0.0-20240223171839-a745f9132927/go.mod h1:XeRXnEi4XQWnJR8g3oZfl8SpxQmOGUuceCKZ7oCRQY0=
-github.com/coracle-social/khatru v0.0.0-20240223173544-4917bff78235 h1:ld8WJhcKIwD+A/PNWGmzskuFPeWf6ncqFyJnxUbI0kA=
-github.com/coracle-social/khatru v0.0.0-20240223173544-4917bff78235/go.mod h1:D1Zv+LzI490Dtlu/4NkZ7ZyY1Am6EXOK/FYkjx6szN4=
-github.com/coracle-social/khatru v0.0.0-20240223181720-10696e226f15 h1:ciR+SP2ppgXbRp5IU90eKw7LrR2ZrS6pbAYeo/h5IN0=
-github.com/coracle-social/khatru v0.0.0-20240223181720-10696e226f15/go.mod h1:D1Zv+LzI490Dtlu/4NkZ7ZyY1Am6EXOK/FYkjx6szN4=
 github.com/davecgh/go-spew v1.1.1 h1:vj9j/u1bqnvCEfJOwUhtlOARqs3+rkHYY13jYWTU97c=
 github.com/davecgh/go-spew v1.1.1/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/decred/dcrd/crypto/blake256 v1.0.1 h1:7PltbUIQB7u/FfZ39+DGa/ShuMyJ5ilcvdfma9wOH6Y=
