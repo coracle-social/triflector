@@ -127,6 +127,10 @@ func main() {
 
 	relay.RejectFilter = append(relay.RejectFilter,
 		func(ctx context.Context, filter nostr.Filter) (reject bool, msg string) {
+			if slices.Contains(filter.Kinds, 28934) {
+				return true, "restricted: access denied"
+			}
+
 			return checkAuth(ctx)
 		},
 	)
