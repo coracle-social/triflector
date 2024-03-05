@@ -121,7 +121,7 @@ func handleSharedKeyEvent(e *nostr.Event) {
 }
 
 func syncSharedKeys() {
-	sk := env("GROUP_MEMBER_SK")
+	sk := env("GROUP_ADMIN_SK")
 	pk, err := nostr.GetPublicKey(sk)
 
 	if err != nil {

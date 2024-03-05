@@ -14,8 +14,7 @@ The following environment variables are optional:
 - `RELAY_CLAIMS` - a comma-separated list of claims to auto-approve for relay access
 - `AUTH_WHITELIST` - a comma-separate list of pubkeys to allow access for
 - `AUTH_BACKEND` - a url to delegate authorization to
-- `GROUP_MEMBER_SK` - the private key of a group member, used to decrypt group messages and build member lists
-- `GROUP_ADMIN_SK` - the admin private key of a group, used to auto-approve group access requests
+- `GROUP_ADMIN_SK` - the admin private key of a group, used to auto-approve group access requests, decrypt group messages, and build member lists
 - `GROUP_CLAIMS` - a comma-separated list of claims to auto-approve for group access
 
 ## Access control
@@ -46,12 +45,11 @@ To set this up, a few things need to be done:
 
 - Authorize your group's admin key using another access control method so that it can publish events, even when the relay has an empty database. This is needed to bootstrap the relay's group-based access control.
 - Add your relay's url to your group's relay list. This tells clients to use your relay to read and write group events.
-- Provide any group member's private key using the `GROUP_MEMBER_SK` environment variable. This allows your relay to receive shared keys and decrypt group events.
-- Publish a kind 10002 using your relay's `GROUP_MEMBER_SK` pointing to your relay's url (to make sure clients using the outbox model correctly deliver messages to your relay).
+- Provide you group admin's private key using the `GROUP_ADMIN_SK` environment variable. This allows your relay to receive shared keys and decrypt group events.
 
-Once a shared key has been published to your Triflector instance, the relay will decrypt any invitations addressed to the relay's `GROUP_MEMBER_SK` in order to access the shared private keys. Then, using these keys the relay will decrypt all messages, searching for `kind 27` member list events. Any member included in the member list will then be allowed to read and write from your relay.
+Once a shared key has been published to your Triflector instance, the relay will decrypt any invitations addressed to the relay's `GROUP_ADMIN_SK` in order to access the shared private keys. Then, using these keys the relay will decrypt all messages, searching for `kind 27` member list events. Any member included in the member list will then be allowed to read and write from your relay.
 
-If auto-approval of group access requests is desired, `GROUP_ADMIN_SK` may be set to the group's admin key. This allows the relay to decrypt messages sent to the group admin, and auto-approve group access requests using a claim defined in `GROUP_CLAIMS`.
+If auto-approval of group access requests is desired the `GROUP_ADMIN_SK` wil also be used to decrypt messages sent to the group admin, and auto-approve group access requests using a claim defined in `GROUP_CLAIMS`.
 
 # TODO
 

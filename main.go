@@ -1,10 +1,10 @@
 package main
 
 import (
-  "slices"
 	"context"
 	"fmt"
 	"net/http"
+	"slices"
 
 	"github.com/fiatjaf/eventstore/sqlite3"
 	"github.com/fiatjaf/khatru"
@@ -61,9 +61,6 @@ func main() {
 	group_admin_sk := env("GROUP_ADMIN_SK")
 	group_admin_pk, _ := nostr.GetPublicKey(group_admin_sk)
 
-	group_member_sk := env("GROUP_MEMBER_SK")
-	group_member_pk, _ := nostr.GetPublicKey(group_member_sk)
-
 	relay = khatru.NewRelay()
 	relay.Info.Name = env("RELAY_NAME")
 	relay.Info.Icon = env("RELAY_ICON")
@@ -93,9 +90,7 @@ func main() {
 				pk := tag.Value()
 
 				var sk string
-				if pk == group_member_pk {
-					sk = group_member_sk
-				} else if pk == group_admin_pk {
+				if pk == group_admin_pk {
 					sk = group_admin_sk
 				} else {
 					shared_keys_mu.RLock()
