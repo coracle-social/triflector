@@ -18,15 +18,22 @@ func checkAuthUsingEnv(pubkey string) bool {
 }
 
 func checkAuthUsingClaim(pubkey string) bool {
-	var claim string
+	var valid_claims = strings.Split(env("RELAY_CLAIMS"), ",")
+	var claims []string
 
-	err := backend.DB.Get(&claim, "SELECT claim FROM claim WHERE pubkey = $1", pubkey)
+	err := backend.DB.Select(&claims, "SELECT claim FROM claim WHERE pubkey = $1", pubkey)
 
 	if err != nil {
 		fmt.Println(err)
 	}
 
-	return slices.Contains(strings.Split(env("RELAY_CLAIMS"), ","), claim)
+	for _, claim := range claims {
+		if slices.Contains(valid_claims, claim) {
+			return true
+		}
+	}
+
+	return false
 }
 
 type BackendAccess struct {
