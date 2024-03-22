@@ -13,30 +13,38 @@ import (
 	"github.com/nbd-wtf/go-nostr"
 )
 
-func checkAuth(ctx context.Context) (reject bool, msg string) {
-	pubkey := khatru.GetAuthed(ctx)
-
-	if pubkey == "" {
-		return true, "auth-required: authentication is required for access"
-	}
-
+func isAllowed(pubkey string) bool {
 	if checkAuthUsingEnv(pubkey) {
-		return false, ""
+		return true
 	}
 
 	if checkAuthUsingClaim(pubkey) {
-		return false, ""
+		return true
 	}
 
 	if checkAuthUsingBackend(pubkey) {
-		return false, ""
+		return true
 	}
 
 	if checkAuthUsingMemberList(pubkey) {
-		return false, ""
+		return true
 	}
 
-	return true, "restricted: access denied"
+	return false
+}
+
+func checkAuth(pubkey string) (reject bool, msg string) {
+	if env("AUTH_RESTRICT_USER", "true") == "true" {
+		if pubkey == "" {
+			return true, "auth-required: authentication is required for access"
+		}
+
+		if !isAllowed(pubkey) {
+			return true, "restricted: access denied"
+		}
+	}
+
+	return false, ""
 }
 
 func migrate(db *sqlx.DB) {
@@ -117,7 +125,11 @@ func main() {
 				}
 			}
 
-			return checkAuth(ctx)
+			if env("AUTH_RESTRICT_AUTHOR", "false") == "true" && !isAllowed(event.PubKey) {
+				return true, "restricted: event author is not in the ACL"
+			}
+
+			return checkAuth(khatru.GetAuthed(ctx))
 		},
 	)
 
@@ -127,7 +139,7 @@ func main() {
 				return true, "restricted: access denied"
 			}
 
-			return checkAuth(ctx)
+			return checkAuth(khatru.GetAuthed(ctx))
 		},
 	)
 

@@ -12,8 +12,10 @@ The following environment variables are optional:
 - `RELAY_PUBKEY` - the public key of your relay
 - `RELAY_DESCRIPTION` - your relay's description
 - `RELAY_CLAIMS` - a comma-separated list of claims to auto-approve for relay access
-- `AUTH_WHITELIST` - a comma-separate list of pubkeys to allow access for
 - `AUTH_BACKEND` - a url to delegate authorization to
+- `AUTH_WHITELIST` - a comma-separate list of pubkeys to allow access for
+- `AUTH_RESTRICT_USER` - whether to only accept events published by authenticated users. Defaults to `true`. If `false`, no AUTH challenge will be sent.
+- `AUTH_RESTRICT_AUTHOR` - whether to only accept events signed by authorized users. Defaults to `false`.
 - `GROUP_ADMIN_SK` - the admin private key of a group, used to auto-approve group access requests, decrypt group messages, and build member lists
 - `GROUP_CLAIMS` - a comma-separated list of claims to auto-approve for group access
 
