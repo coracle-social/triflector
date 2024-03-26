@@ -5,11 +5,9 @@ go 1.21.5
 require (
 	git.ekzyis.com/ekzyis/nip44 v0.0.0-20231230170032-ddde532a9e6c
 	github.com/decred/dcrd/dcrec/secp256k1/v4 v4.2.0
-	github.com/fiatjaf/eventstore v0.3.10
-	github.com/fiatjaf/khatru v0.3.1
 	github.com/jmoiron/sqlx v1.3.5
 	github.com/joho/godotenv v1.5.1
-	github.com/nbd-wtf/go-nostr v0.28.3
+	github.com/nbd-wtf/go-nostr v0.28.5
 	github.com/pkg/errors v0.9.1
 )
 
@@ -19,6 +17,8 @@ require (
 	github.com/btcsuite/btcd/chaincfg/chainhash v1.0.2 // indirect
 	github.com/decred/dcrd/crypto/blake256 v1.0.1 // indirect
 	github.com/fasthttp/websocket v1.5.7 // indirect
+	github.com/fiatjaf/eventstore v0.3.13 // indirect
+	github.com/fiatjaf/khatru v0.3.2 // indirect
 	github.com/gobwas/httphead v0.1.0 // indirect
 	github.com/gobwas/pool v0.2.1 // indirect
 	github.com/gobwas/ws v1.3.1 // indirect

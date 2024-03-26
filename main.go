@@ -75,7 +75,6 @@ func main() {
 	relay.Info.PubKey = env("RELAY_PUBKEY")
 	relay.Info.Description = env("RELAY_DESCRIPTION")
 
-	fmt.Println(env("DATABASE_URL"))
 	backend = postgresql.PostgresBackend{DatabaseURL: env("DATABASE_URL")}
 	if err := backend.Init(); err != nil {
 		panic(err)
