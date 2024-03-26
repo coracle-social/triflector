@@ -31,7 +31,7 @@ func getEnv() func(k string, fallback ...string) (v string) {
 	var env = make(map[string]string)
 
 	for _, item := range os.Environ() {
-		parts := strings.Split(item, "=")
+		parts := strings.SplitN(item, "=", 2)
 		env[parts[0]] = parts[1]
 	}
 

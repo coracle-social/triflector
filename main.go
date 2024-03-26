@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"slices"
 
-	"github.com/fiatjaf/eventstore/sqlite3"
+	"github.com/fiatjaf/eventstore/postgresql"
 	"github.com/fiatjaf/khatru"
 	"github.com/jmoiron/sqlx"
 	_ "github.com/joho/godotenv/autoload"
@@ -50,9 +50,9 @@ func checkAuth(pubkey string) (reject bool, msg string) {
 func migrate(db *sqlx.DB) {
 	db.MustExec(`
     CREATE TABLE IF NOT EXISTS claim (
-      pubkey string NOT NULL,
-      claim string NOT NULL,
-      type string NOT NULL
+      pubkey char(64) NOT NULL,
+      claim text NOT NULL,
+      type text NOT NULL
     );
 
     CREATE UNIQUE INDEX IF NOT EXISTS claim__pubkey_claim ON claim (pubkey, claim, type);
@@ -60,7 +60,7 @@ func migrate(db *sqlx.DB) {
 }
 
 var relay *khatru.Relay
-var backend sqlite3.SQLite3Backend
+var backend postgresql.PostgresBackend
 var env func(k string, fallback ...string) (v string)
 
 func main() {
@@ -75,7 +75,8 @@ func main() {
 	relay.Info.PubKey = env("RELAY_PUBKEY")
 	relay.Info.Description = env("RELAY_DESCRIPTION")
 
-	backend = sqlite3.SQLite3Backend{DatabaseURL: "./relay.db"}
+	fmt.Println(env("DATABASE_URL"))
+	backend = postgresql.PostgresBackend{DatabaseURL: env("DATABASE_URL")}
 	if err := backend.Init(); err != nil {
 		panic(err)
 	}
