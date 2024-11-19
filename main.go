@@ -89,7 +89,7 @@ func main() {
 			if event.Kind == AUTH_JOIN {
 				handleAccessRequest(event)
 
-				if !isAllowed(event.PubKey) {
+				if env("AUTH_RESTRICT_USER", "true") == "true" && !isAllowed(event.PubKey) {
 					return true, "restricted: failed to validate invite code"
 				}
 
