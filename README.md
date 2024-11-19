@@ -16,8 +16,6 @@ The following environment variables are optional:
 - `AUTH_WHITELIST` - a comma-separate list of pubkeys to allow access for
 - `AUTH_RESTRICT_USER` - whether to only accept events published by authenticated users. Defaults to `true`. If `false`, no AUTH challenge will be sent.
 - `AUTH_RESTRICT_AUTHOR` - whether to only accept events signed by authorized users. Defaults to `false`.
-- `GROUP_ADMIN_SK` - the admin private key of a group, used to auto-approve group access requests, decrypt group messages, and build member lists
-- `GROUP_CLAIMS` - a comma-separated list of claims to auto-approve for group access
 
 ## Access control
 
@@ -37,22 +35,4 @@ For example, providing `AUTH_BACKEND=http://example.com/check-auth?pubkey=` will
 
 ### Relay claims
 
-A user may send a `kind 28934` claim event to this relay. If the `claim` tag is in the `GROUP_CLAIMS` list, the pubkey which signed the event will be granted access to the relay.
-
-### Group-based access
-
-Triflector supports access controls based on [NIP 87](https://github.com/nostr-protocol/nips/pull/875) group member lists.
-
-To set this up, a few things need to be done:
-
-- Authorize your group's admin key using another access control method so that it can publish events, even when the relay has an empty database. This is needed to bootstrap the relay's group-based access control.
-- Add your relay's url to your group's relay list. This tells clients to use your relay to read and write group events.
-- Provide you group admin's private key using the `GROUP_ADMIN_SK` environment variable. This allows your relay to receive shared keys and decrypt group events.
-
-Once a shared key has been published to your Triflector instance, the relay will decrypt any invitations addressed to the relay's `GROUP_ADMIN_SK` in order to access the shared private keys. Then, using these keys the relay will decrypt all messages, searching for `kind 27` member list events. Any member included in the member list will then be allowed to read and write from your relay.
-
-If auto-approval of group access requests is desired the `GROUP_ADMIN_SK` wil also be used to decrypt messages sent to the group admin, and auto-approve group access requests using a claim defined in `GROUP_CLAIMS`.
-
-# TODO
-
-- Use https://github.com/puzpuzpuz/xsync
+A user may send a `kind 28934` claim event to this relay. If the `claim` tag is in the `RELAY_CLAIMS` list, the pubkey which signed the event will be granted access to the relay.

@@ -13,6 +13,8 @@ import (
 	"github.com/nbd-wtf/go-nostr"
 )
 
+var AUTH_JOIN = 28934
+
 func isAllowed(pubkey string) bool {
 	if checkAuthUsingEnv(pubkey) {
 		return true
@@ -23,10 +25,6 @@ func isAllowed(pubkey string) bool {
 	}
 
 	if checkAuthUsingBackend(pubkey) {
-		return true
-	}
-
-	if checkAuthUsingMemberList(pubkey) {
 		return true
 	}
 
@@ -51,11 +49,10 @@ func migrate(db *sqlx.DB) {
 	db.MustExec(`
     CREATE TABLE IF NOT EXISTS claim (
       pubkey char(64) NOT NULL,
-      claim text NOT NULL,
-      type text NOT NULL
+      claim text NOT NULL
     );
 
-    CREATE UNIQUE INDEX IF NOT EXISTS claim__pubkey_claim ON claim (pubkey, claim, type);
+    CREATE UNIQUE INDEX IF NOT EXISTS claim__pubkey_claim ON claim (pubkey, claim);
   `)
 }
 
@@ -65,9 +62,6 @@ var env func(k string, fallback ...string) (v string)
 
 func main() {
 	env = getEnv()
-
-	group_admin_sk := env("GROUP_ADMIN_SK")
-	group_admin_pk, _ := nostr.GetPublicKey(group_admin_sk)
 
 	relay = khatru.NewRelay()
 	relay.Info.Name = env("RELAY_NAME")
@@ -90,39 +84,8 @@ func main() {
 
 	relay.RejectEvent = append(relay.RejectEvent,
 		func(ctx context.Context, event *nostr.Event) (reject bool, msg string) {
-			if event.Kind == 28934 {
-				handleRelayAccessRequest(event)
-			}
-
-			if tag := event.Tags.GetFirst([]string{"p"}); tag != nil && (event.Kind == 1059 || event.Kind == 1060) {
-				pk := tag.Value()
-
-				var sk string
-				if pk == group_admin_pk {
-					sk = group_admin_sk
-				} else {
-					shared_keys_mu.RLock()
-
-					if shared_sk, ok := shared_keys[pk]; ok {
-						sk = shared_sk
-					}
-
-					shared_keys_mu.RUnlock()
-				}
-
-				if sk != "" {
-					rumor, err := getRumor(sk, event)
-
-					if err != nil {
-						fmt.Println(err)
-					} else if rumor.Kind == 24 {
-						handleSharedKeyEvent(rumor)
-					} else if rumor.Kind == 25 {
-						handleGroupAccessRequest(rumor)
-					} else if rumor.Kind == 27 {
-						handleMemberListEvent(rumor)
-					}
-				}
+			if event.Kind == AUTH_JOIN {
+				handleAccessRequest(event)
 			}
 
 			if env("AUTH_RESTRICT_AUTHOR", "false") == "true" && !isAllowed(event.PubKey) {
@@ -142,8 +105,6 @@ func main() {
 			return checkAuth(khatru.GetAuthed(ctx))
 		},
 	)
-
-	go keepMemberListInSync()
 
 	mux := relay.Router()
 
