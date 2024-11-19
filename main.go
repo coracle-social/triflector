@@ -76,6 +76,8 @@ func main() {
 
 	migrate(backend.DB)
 
+  relay.OnConnect = append(relay.OnConnect, khatru.RequestAuth)
+
 	relay.StoreEvent = append(relay.StoreEvent, backend.SaveEvent)
 
 	relay.DeleteEvent = append(relay.DeleteEvent, backend.DeleteEvent)
