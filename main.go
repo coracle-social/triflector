@@ -76,7 +76,7 @@ func main() {
 
 	migrate(backend.DB)
 
-  relay.OnConnect = append(relay.OnConnect, khatru.RequestAuth)
+	relay.OnConnect = append(relay.OnConnect, khatru.RequestAuth)
 
 	relay.StoreEvent = append(relay.StoreEvent, backend.SaveEvent)
 
@@ -88,10 +88,16 @@ func main() {
 		func(ctx context.Context, event *nostr.Event) (reject bool, msg string) {
 			if event.Kind == AUTH_JOIN {
 				handleAccessRequest(event)
+
+				if !isAllowed(event.PubKey) {
+					return true, "restricted: failed to validate invite code"
+				}
+
+				return false, ""
 			}
 
 			if env("AUTH_RESTRICT_AUTHOR", "false") == "true" && !isAllowed(event.PubKey) {
-				return true, "restricted: event author is not in the ACL"
+				return true, "restricted: event author is not a member of this relay"
 			}
 
 			return checkAuth(khatru.GetAuthed(ctx))
@@ -100,8 +106,8 @@ func main() {
 
 	relay.RejectFilter = append(relay.RejectFilter,
 		func(ctx context.Context, filter nostr.Filter) (reject bool, msg string) {
-			if slices.Contains(filter.Kinds, 28934) {
-				return true, "restricted: access denied"
+			if slices.Contains(filter.Kinds, AUTH_JOIN) {
+				return true, "restricted: join events cannot be queried"
 			}
 
 			return checkAuth(khatru.GetAuthed(ctx))
