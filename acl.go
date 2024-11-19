@@ -89,7 +89,7 @@ func handleAccessRequest(e *nostr.Event) {
 	}
 
 	backend.DB.MustExec(
-		"INSERT INTO claim (pubkey, claim) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING",
+		"INSERT INTO claim (pubkey, claim) VALUES ($1, $2) ON CONFLICT DO NOTHING",
 		e.PubKey,
 		tag.Value(),
 	)
