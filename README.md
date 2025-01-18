@@ -37,7 +37,7 @@ For example, providing `AUTH_BACKEND=http://example.com/check-auth?pubkey=` will
 
 A user may send a `kind 28934` claim event to this relay. If the `claim` tag is in the `RELAY_CLAIMS` list, the pubkey which signed the event will be granted access to the relay.
 
-### Docker
+## Docker
 
 Clone the repository and run `docker build -t triflector:local .` to build the image.
 
