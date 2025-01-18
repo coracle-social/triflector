@@ -39,15 +39,13 @@ A user may send a `kind 28934` claim event to this relay. If the `claim` tag is 
 
 ## Docker
 
-Clone the repository and run `docker build -t triflector:local .` to build the image.
-
-Then you can use Docker Compose or Portainer Stacks to run a container:
+You can use Docker Compose or Portainer Stacks to run a container:
 
 ```
 services:
 
   triflector:
-    image: triflector:local
+    image: ghcr.io/coracle-social/triflector
     container_name: triflector
     restart: unless-stopped
     networks:
