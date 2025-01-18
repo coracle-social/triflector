@@ -36,3 +36,49 @@ For example, providing `AUTH_BACKEND=http://example.com/check-auth?pubkey=` will
 ### Relay claims
 
 A user may send a `kind 28934` claim event to this relay. If the `claim` tag is in the `RELAY_CLAIMS` list, the pubkey which signed the event will be granted access to the relay.
+
+### Docker
+
+Clone the repository and run `docker build -t triflector:local .` to build the image.
+
+Then you can use Docker Compose or Portainer Stacks to run a container:
+
+```
+services:
+
+  triflector:
+    image: triflector:local
+    container_name: triflector
+    restart: unless-stopped
+    networks:
+      - triflectornet
+    ports:
+      - 3334:3334
+    environment:
+      - DATABASE_URL=postgres://triflector:YOUR_PASSWORD_HERE@database:5432/triflector?sslmode=disable
+
+  database:
+    image: postgres
+    container_name: triflector_db
+    restart: unless-stopped
+    networks:
+      - triflectornet
+    volumes:
+      - triflectordata:/var/lib/postgresql/data
+    environment:
+      - POSTGRES_DB=triflector
+      - POSTGRES_USER=triflector
+      - POSTGRES_PASSWORD=YOUR_PASSWORD_HERE
+
+networks:
+
+  triflectornet:
+
+volumes:
+
+  triflectordata:
+```
+
+Make sure to change the example postgres password in both DATABASE_URL and POSTGRES_PASSWORD.
+
+You can add the environment variables from [Basic configuration](#basic-configuration) to the `environment:` section under `triflector:` to customize your relay.
