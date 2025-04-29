@@ -1,2 +1,5 @@
 .env
 relay.db
+blossom
+blossom-db
+triflector

@@ -7,6 +7,7 @@ This is a relay based on [Khatru](https://github.com/fiatjaf/khatru) which imple
 The following environment variables are optional:
 
 - `PORT` - the port to run on
+- `RELAY_URL` - the url of your relay
 - `RELAY_NAME` - the name of your relay
 - `RELAY_ICON` - an icon for your relay
 - `RELAY_PUBKEY` - the public key of your relay

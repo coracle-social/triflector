@@ -1,16 +1,22 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"fmt"
+	"io"
+	"log"
 	"net/http"
 	"slices"
 
+	"github.com/fiatjaf/eventstore/badger"
 	"github.com/fiatjaf/eventstore/postgresql"
 	"github.com/fiatjaf/khatru"
+	"github.com/fiatjaf/khatru/blossom"
 	"github.com/jmoiron/sqlx"
 	_ "github.com/joho/godotenv/autoload"
 	"github.com/nbd-wtf/go-nostr"
+	"github.com/spf13/afero"
 )
 
 var AUTH_JOIN = 28934
@@ -29,6 +35,12 @@ func isAllowed(pubkey string) bool {
 	}
 
 	return false
+}
+
+func isBlossomAllowed(pubkey string) bool {
+	shouldCheck := env("AUTH_RESTRICT_AUTHOR", "false") == "true" || env("AUTH_RESTRICT_USER", "true") == "true"
+
+	return !shouldCheck || isAllowed(pubkey)
 }
 
 func checkAuth(pubkey string) (reject bool, msg string) {
@@ -114,17 +126,91 @@ func main() {
 		},
 	)
 
+	// Blossom
+
+	fs := afero.NewOsFs()
+	blossomPath := "./blossom/"
+
+	if err := fs.MkdirAll(blossomPath, 0755); err != nil {
+		log.Fatal("🚫 error creating blossom path:", err)
+	}
+
+	bldb := &badger.BadgerBackend{Path: "./blossom-db"}
+	bldb.Init()
+
+	bl := blossom.New(relay, "https://"+env("RELAY_URL", "localhost:3334"))
+
+	bl.Store = blossom.EventStoreBlobIndexWrapper{Store: bldb, ServiceURL: bl.ServiceURL}
+
+	bl.StoreBlob = append(bl.StoreBlob, func(ctx context.Context, sha256 string, body []byte) error {
+		file, err := fs.Create(blossomPath + sha256)
+		if err != nil {
+			return err
+		}
+
+		if _, err := io.Copy(file, bytes.NewReader(body)); err != nil {
+			return err
+		}
+
+		return nil
+	})
+
+	bl.LoadBlob = append(bl.LoadBlob, func(ctx context.Context, sha256 string) (io.ReadSeeker, error) {
+		return fs.Open(blossomPath + sha256)
+	})
+
+	bl.DeleteBlob = append(bl.DeleteBlob, func(ctx context.Context, sha256 string) error {
+		return fs.Remove(blossomPath + sha256)
+	})
+
+	bl.RejectUpload = append(bl.RejectUpload, func(ctx context.Context, auth *nostr.Event, size int, ext string) (bool, string, int) {
+		if size > 10*1024*1024 {
+			return true, "file too large", 413
+		}
+
+		if auth == nil || !isBlossomAllowed(auth.PubKey) {
+			return true, "unauthorized", 403
+		}
+
+		return false, ext, size
+	})
+
+	bl.RejectGet = append(bl.RejectGet, func(ctx context.Context, auth *nostr.Event, sha256 string) (bool, string, int) {
+		if auth == nil || !isBlossomAllowed(auth.PubKey) {
+			return true, "unauthorized", 403
+		}
+
+		return false, "", 200
+	})
+
+	bl.RejectList = append(bl.RejectList, func(ctx context.Context, auth *nostr.Event, pubkey string) (bool, string, int) {
+		if auth == nil || !isBlossomAllowed(auth.PubKey) {
+			return true, "unauthorized", 403
+		}
+
+		return false, "", 200
+	})
+
+	bl.RejectDelete = append(bl.RejectDelete, func(ctx context.Context, auth *nostr.Event, sha256 string) (bool, string, int) {
+		if auth == nil || !isBlossomAllowed(auth.PubKey) {
+			return true, "unauthorized", 403
+		}
+
+		return false, "", 200
+	})
+
+	// Merge everything into a single handler and start the server
+
 	mux := relay.Router()
 
-	// set up other http handlers
-	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("GET /{$}", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("content-type", "text/html")
 		fmt.Fprintf(w, `This is a nostr relay, please connect using wss://`)
 	})
 
 	port := env("PORT", "3334")
 
-	// start the server
 	fmt.Printf("running on :%s\n", port)
+
 	http.ListenAndServe(fmt.Sprintf(":%s", port), relay)
 }
