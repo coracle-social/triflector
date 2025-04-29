@@ -86,6 +86,8 @@ func main() {
 		panic(err)
 	}
 
+	backend.QueryTagsLimit = 100
+
 	migrate(backend.DB)
 
 	relay.OnConnect = append(relay.OnConnect, khatru.RequestAuth)
