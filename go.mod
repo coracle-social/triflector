@@ -1,4 +1,4 @@
-module triflector
+module frith
 
 go 1.24.1
 

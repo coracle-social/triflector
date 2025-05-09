@@ -1,4 +1,4 @@
-# Triflector
+# Frith
 
 This is a relay based on [Khatru](https://github.com/fiatjaf/khatru) which implements a range of access controls.
 
@@ -45,39 +45,39 @@ You can use Docker Compose or Portainer Stacks to run a container:
 ```
 services:
 
-  triflector:
-    image: ghcr.io/coracle-social/triflector
-    container_name: triflector
+  frith:
+    image: ghcr.io/coracle-social/frith
+    container_name: frith
     restart: unless-stopped
     networks:
-      - triflectornet
+      - frithnet
     ports:
       - 3334:3334
     environment:
-      - DATABASE_URL=postgres://triflector:YOUR_PASSWORD_HERE@database:5432/triflector?sslmode=disable
+      - DATABASE_URL=postgres://frith:YOUR_PASSWORD_HERE@database:5432/frith?sslmode=disable
 
   database:
     image: postgres
-    container_name: triflector_db
+    container_name: frith_db
     restart: unless-stopped
     networks:
-      - triflectornet
+      - frithnet
     volumes:
-      - triflectordata:/var/lib/postgresql/data
+      - frithdata:/var/lib/postgresql/data
     environment:
-      - POSTGRES_DB=triflector
-      - POSTGRES_USER=triflector
+      - POSTGRES_DB=frith
+      - POSTGRES_USER=frith
       - POSTGRES_PASSWORD=YOUR_PASSWORD_HERE
 
 networks:
 
-  triflectornet:
+  frithnet:
 
 volumes:
 
-  triflectordata:
+  frithdata:
 ```
 
 Make sure to change the example postgres password in both DATABASE_URL and POSTGRES_PASSWORD.
 
-You can add the environment variables from [Basic configuration](#basic-configuration) to the `environment:` section under `triflector:` to customize your relay.
+You can add the environment variables from [Basic configuration](#basic-configuration) to the `environment:` section under `frith:` to customize your relay.
