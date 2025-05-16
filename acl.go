@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"github.com/dgraph-io/badger/v4"
 	"github.com/nbd-wtf/go-nostr"
 	"net/http"
 	"slices"
@@ -10,21 +11,38 @@ import (
 	"time"
 )
 
+func getUserClaims(pubkey string) []string {
+	var stored_claims string
+	err := db.View(func(txn *badger.Txn) error {
+		item, err := txn.Get([]byte("claim:" + pubkey))
+		if err != nil {
+			return err
+		}
+
+		return item.Value(func(val []byte) error {
+			stored_claims = string(val)
+			return nil
+		})
+	})
+
+	if err != nil {
+		if err != badger.ErrKeyNotFound {
+			fmt.Println(err)
+		}
+		return []string{}
+	}
+
+	return strings.Split(stored_claims, ",")
+}
+
 func checkAuthUsingEnv(pubkey string) bool {
 	return strings.Contains(env("AUTH_WHITELIST"), pubkey)
 }
 
 func checkAuthUsingClaim(pubkey string) bool {
-	var valid_claims = strings.Split(env("RELAY_CLAIMS"), ",")
-	var claims []string
+	valid_claims := strings.Split(env("RELAY_CLAIMS"), ",")
 
-	err := backend.DB.Select(&claims, "SELECT claim FROM claim WHERE pubkey = $1", pubkey)
-
-	if err != nil {
-		fmt.Println(err)
-	}
-
-	for _, claim := range claims {
+	for _, claim := range getUserClaims(pubkey) {
 		if slices.Contains(valid_claims, claim) {
 			return true
 		}
@@ -88,9 +106,19 @@ func handleAccessRequest(e *nostr.Event) {
 		return
 	}
 
-	backend.DB.MustExec(
-		"INSERT INTO claim (pubkey, claim) VALUES ($1, $2) ON CONFLICT DO NOTHING",
-		e.PubKey,
-		tag.Value(),
-	)
+	// Get existing claims
+	user_claims := getUserClaims(e.PubKey)
+
+	// Add new claim
+	if !slices.Contains(user_claims, tag.Value()) {
+		user_claims = append(user_claims, tag.Value())
+		claims_str := strings.Join(user_claims, ",")
+
+		// Store updated claims
+		if err := db.Update(func(txn *badger.Txn) error {
+			return txn.Set([]byte("claim:"+e.PubKey), []byte(claims_str))
+		}); err != nil {
+			fmt.Println(err)
+		}
+	}
 }

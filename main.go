@@ -8,12 +8,12 @@ import (
 	"log"
 	"net/http"
 	"slices"
+	"time"
 
-	"github.com/fiatjaf/eventstore/badger"
-	"github.com/fiatjaf/eventstore/postgresql"
+	"github.com/dgraph-io/badger/v4"
+	eventstore "github.com/fiatjaf/eventstore/badger"
 	"github.com/fiatjaf/khatru"
 	"github.com/fiatjaf/khatru/blossom"
-	"github.com/jmoiron/sqlx"
 	_ "github.com/joho/godotenv/autoload"
 	"github.com/nbd-wtf/go-nostr"
 	"github.com/spf13/afero"
@@ -57,38 +57,46 @@ func checkAuth(pubkey string) (reject bool, msg string) {
 	return false, ""
 }
 
-func migrate(db *sqlx.DB) {
-	db.MustExec(`
-    CREATE TABLE IF NOT EXISTS claim (
-      pubkey char(64) NOT NULL,
-      claim text NOT NULL
-    );
-
-    CREATE UNIQUE INDEX IF NOT EXISTS claim__pubkey_claim ON claim (pubkey, claim);
-  `)
-}
-
 var relay *khatru.Relay
-var backend postgresql.PostgresBackend
+var db *badger.DB
 var env func(k string, fallback ...string) (v string)
 
 func main() {
 	env = getEnv()
 
+	// Set up our database
+	var err error
+	db, err = badger.Open(badger.DefaultOptions("./db.badger"))
+	if err != nil {
+		log.Fatal("Failed to open badger db:", err)
+	}
+
+	ticker := time.NewTicker(5 * time.Minute)
+	go func() {
+		for range ticker.C {
+		again:
+			err := db.RunValueLogGC(0.7)
+			if err == nil {
+				goto again
+			}
+		}
+	}()
+
+	defer ticker.Stop()
+	defer db.Close()
+
+	// Set up our relay
 	relay = khatru.NewRelay()
 	relay.Info.Name = env("RELAY_NAME")
 	relay.Info.Icon = env("RELAY_ICON")
 	relay.Info.PubKey = env("RELAY_PUBKEY")
 	relay.Info.Description = env("RELAY_DESCRIPTION")
 
-	backend = postgresql.PostgresBackend{DatabaseURL: env("DATABASE_URL")}
+	// Set up our relay backend
+	backend := &eventstore.BadgerBackend{Path: "./events.badger"}
 	if err := backend.Init(); err != nil {
-		panic(err)
+		log.Fatal("Failed to initialize backend:", err)
 	}
-
-	backend.QueryTagsLimit = 100
-
-	migrate(backend.DB)
 
 	relay.OnConnect = append(relay.OnConnect, khatru.RequestAuth)
 
@@ -137,8 +145,10 @@ func main() {
 		log.Fatal("🚫 error creating blossom path:", err)
 	}
 
-	bldb := &badger.BadgerBackend{Path: "./blossom-db"}
-	bldb.Init()
+	bldb := &eventstore.BadgerBackend{Path: "./blossom.badger"}
+	if err := bldb.Init(); err != nil {
+		log.Fatal("Failed to initialize blossom backend:", err)
+	}
 
 	bl := blossom.New(relay, "https://"+env("RELAY_URL", "localhost:3334"))
 
