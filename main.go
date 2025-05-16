@@ -7,7 +7,10 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"os"
+	"os/signal"
 	"slices"
+	"syscall"
 	"time"
 
 	"github.com/dgraph-io/badger/v4"
@@ -62,6 +65,14 @@ var db *badger.DB
 var env func(k string, fallback ...string) (v string)
 
 func main() {
+	// Create context that we'll cancel on shutdown
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	// Set up graceful shutdown
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
+
 	env = getEnv()
 
 	// Set up our database
@@ -73,11 +84,16 @@ func main() {
 
 	ticker := time.NewTicker(5 * time.Minute)
 	go func() {
-		for range ticker.C {
-		again:
-			err := db.RunValueLogGC(0.7)
-			if err == nil {
-				goto again
+		for {
+			select {
+			case <-ticker.C:
+			again:
+				err := db.RunValueLogGC(0.7)
+				if err == nil {
+					goto again
+				}
+			case <-ctx.Done():
+				return
 			}
 		}
 	}()
@@ -220,9 +236,34 @@ func main() {
 		fmt.Fprintf(w, `This is a nostr relay, please connect using wss://`)
 	})
 
+	// Create server
 	port := env("PORT", "3334")
+	srv := &http.Server{
+		Addr:    fmt.Sprintf(":%s", port),
+		Handler: relay,
+	}
 
-	fmt.Printf("running on :%s\n", port)
+	// Start server in goroutine
+	go func() {
+		fmt.Printf("running on :%s\n", port)
+		if err := srv.ListenAndServe(); err != http.ErrServerClosed {
+			log.Printf("HTTP server error: %v\n", err)
+		}
+	}()
 
-	http.ListenAndServe(fmt.Sprintf(":%s", port), relay)
+	// Wait for interrupt signal
+	<-sigChan
+	fmt.Println("\nShutting down gracefully...")
+
+	// Create shutdown context with timeout
+	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer shutdownCancel()
+
+	// Shutdown the HTTP server
+	if err := srv.Shutdown(shutdownCtx); err != nil {
+		log.Printf("HTTP server shutdown error: %v\n", err)
+	}
+
+	// Cancel context to stop background tasks
+	cancel()
 }
