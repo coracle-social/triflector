@@ -2,7 +2,7 @@
 
 This is a relay based on [Khatru](https://github.com/fiatjaf/khatru) which implements a range of access controls.
 
-## Basic configuration
+## Environment
 
 The following environment variables are optional:
 
@@ -39,7 +39,11 @@ For example, providing `AUTH_BACKEND=http://example.com/check-auth?pubkey=` will
 
 A user may send a `kind 28934` claim event to this relay. If the `claim` tag is in the `RELAY_CLAIMS` list, the pubkey which signed the event will be granted access to the relay.
 
-# Running
+## Development
+
+Run `go run .` to run the project. Be sure to run `go fmt .` before committing.
+
+## Deployment
 
 Frith can be run using an OCI container:
 
