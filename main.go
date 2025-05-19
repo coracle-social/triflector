@@ -159,7 +159,7 @@ func main() {
 	// Blossom
 
 	fs := afero.NewOsFs()
-	blossomPath := fmt.Sprintf("%s/mediae", data)
+	blossomPath := fmt.Sprintf("%s/media", data)
 
 	if err := fs.MkdirAll(blossomPath, 0755); err != nil {
 		log.Fatal("🚫 error creating blossom path:", err)
