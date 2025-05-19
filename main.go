@@ -73,11 +73,15 @@ func main() {
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 
+	// Get our environment
 	env = getEnv()
+	port := env("PORT", "3334")
+	data := env("DATA_DIR", "./data")
+	url := env("RELAY_URL", "localhost:"+port)
 
-	// Set up our database
+	// Set up our app database
 	var err error
-	db, err = badger.Open(badger.DefaultOptions("./db.badger"))
+	db, err = badger.Open(badger.DefaultOptions(fmt.Sprintf("%s/frith", data)))
 	if err != nil {
 		log.Fatal("Failed to open badger db:", err)
 	}
@@ -109,7 +113,7 @@ func main() {
 	relay.Info.Description = env("RELAY_DESCRIPTION")
 
 	// Set up our relay backend
-	backend := &eventstore.BadgerBackend{Path: "./events.badger"}
+	backend := &eventstore.BadgerBackend{Path: fmt.Sprintf("%s/events", data)}
 	if err := backend.Init(); err != nil {
 		log.Fatal("Failed to initialize backend:", err)
 	}
@@ -155,18 +159,18 @@ func main() {
 	// Blossom
 
 	fs := afero.NewOsFs()
-	blossomPath := "./blossom/"
+	blossomPath := fmt.Sprintf("%s/mediae", data)
 
 	if err := fs.MkdirAll(blossomPath, 0755); err != nil {
 		log.Fatal("🚫 error creating blossom path:", err)
 	}
 
-	bldb := &eventstore.BadgerBackend{Path: "./blossom.badger"}
+	bldb := &eventstore.BadgerBackend{Path: fmt.Sprintf("%s/blossom", data)}
 	if err := bldb.Init(); err != nil {
 		log.Fatal("Failed to initialize blossom backend:", err)
 	}
 
-	bl := blossom.New(relay, "https://"+env("RELAY_URL", "localhost:3334"))
+	bl := blossom.New(relay, "https://"+url)
 
 	bl.Store = blossom.EventStoreBlobIndexWrapper{Store: bldb, ServiceURL: bl.ServiceURL}
 
@@ -237,7 +241,6 @@ func main() {
 	})
 
 	// Create server
-	port := env("PORT", "3334")
 	srv := &http.Server{
 		Addr:    fmt.Sprintf(":%s", port),
 		Handler: relay,
