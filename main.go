@@ -9,62 +9,23 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
-	"slices"
 	"syscall"
 	"time"
 
-	"github.com/dgraph-io/badger/v4"
+  "frith/common"
 	eventstore "github.com/fiatjaf/eventstore/badger"
 	"github.com/fiatjaf/khatru"
 	"github.com/fiatjaf/khatru/blossom"
-	_ "github.com/joho/godotenv/autoload"
 	"github.com/nbd-wtf/go-nostr"
 	"github.com/spf13/afero"
 )
 
-var AUTH_JOIN = 28934
-
-func isAllowed(pubkey string) bool {
-	if checkAuthUsingEnv(pubkey) {
-		return true
-	}
-
-	if checkAuthUsingClaim(pubkey) {
-		return true
-	}
-
-	if checkAuthUsingBackend(pubkey) {
-		return true
-	}
-
-	return false
-}
-
-func isBlossomAllowed(pubkey string) bool {
-	shouldCheck := env("AUTH_RESTRICT_AUTHOR", "false") == "true" || env("AUTH_RESTRICT_USER", "true") == "true"
-
-	return !shouldCheck || isAllowed(pubkey)
-}
-
-func checkAuth(pubkey string) (reject bool, msg string) {
-	if env("AUTH_RESTRICT_USER", "true") == "true" {
-		if pubkey == "" {
-			return true, "auth-required: authentication is required for access"
-		}
-
-		if !isAllowed(pubkey) {
-			return true, "restricted: access denied"
-		}
-	}
-
-	return false, ""
-}
-
 var relay *khatru.Relay
-var db *badger.DB
-var env func(k string, fallback ...string) (v string)
 
 func main() {
+	common.SetupEnvironment()
+	common.SetupDatabase()
+
 	// Create context that we'll cancel on shutdown
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -73,26 +34,14 @@ func main() {
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 
-	// Get our environment
-	env = getEnv()
-	port := env("PORT", "3334")
-	data := env("DATA_DIR", "./data")
-	url := env("RELAY_URL", "localhost:"+port)
-
-	// Set up our app database
-	var err error
-	db, err = badger.Open(badger.DefaultOptions(fmt.Sprintf("%s/frith", data)))
-	if err != nil {
-		log.Fatal("Failed to open badger db:", err)
-	}
-
+  // Run GC
 	ticker := time.NewTicker(5 * time.Minute)
 	go func() {
 		for {
 			select {
 			case <-ticker.C:
 			again:
-				err := db.RunValueLogGC(0.7)
+				err := common.Db.RunValueLogGC(0.7)
 				if err == nil {
 					goto again
 				}
@@ -103,74 +52,45 @@ func main() {
 	}()
 
 	defer ticker.Stop()
-	defer db.Close()
+	defer common.Db.Close()
 
 	// Set up our relay
 	relay = khatru.NewRelay()
-	relay.Info.Name = env("RELAY_NAME")
-	relay.Info.Icon = env("RELAY_ICON")
-	relay.Info.PubKey = env("RELAY_PUBKEY")
-	relay.Info.Description = env("RELAY_DESCRIPTION")
+	relay.Info.Name = common.RELAY_NAME
+	relay.Info.Icon = common.RELAY_ICON
+	// relay.Info.Self = common.RELAY_SELF
+	relay.Info.PubKey = common.RELAY_ADMIN
+	relay.Info.Description = common.RELAY_DESCRIPTION
 
 	// Set up our relay backend
-	backend := &eventstore.BadgerBackend{Path: fmt.Sprintf("%s/events", data)}
+	backend := &eventstore.BadgerBackend{Path: common.GetDataDir("events")}
 	if err := backend.Init(); err != nil {
 		log.Fatal("Failed to initialize backend:", err)
 	}
 
 	relay.OnConnect = append(relay.OnConnect, khatru.RequestAuth)
-
 	relay.StoreEvent = append(relay.StoreEvent, backend.SaveEvent)
-
 	relay.DeleteEvent = append(relay.DeleteEvent, backend.DeleteEvent)
-
 	relay.QueryEvents = append(relay.QueryEvents, backend.QueryEvents)
-
-	relay.RejectEvent = append(relay.RejectEvent,
-		func(ctx context.Context, event *nostr.Event) (reject bool, msg string) {
-			if event.Kind == AUTH_JOIN {
-				handleAccessRequest(event)
-
-				if env("AUTH_RESTRICT_USER", "true") == "true" && !isAllowed(event.PubKey) {
-					return true, "restricted: failed to validate invite code"
-				}
-
-				return false, ""
-			}
-
-			if env("AUTH_RESTRICT_AUTHOR", "false") == "true" && !isAllowed(event.PubKey) {
-				return true, "restricted: event author is not a member of this relay"
-			}
-
-			return checkAuth(khatru.GetAuthed(ctx))
-		},
-	)
-
-	relay.RejectFilter = append(relay.RejectFilter,
-		func(ctx context.Context, filter nostr.Filter) (reject bool, msg string) {
-			if slices.Contains(filter.Kinds, AUTH_JOIN) {
-				return true, "restricted: join events cannot be queried"
-			}
-
-			return checkAuth(khatru.GetAuthed(ctx))
-		},
-	)
+	relay.QueryEvents = append(relay.QueryEvents, common.QueryEvents)
+	relay.RejectEvent = append(relay.RejectEvent, common.RejectEvent)
+	relay.RejectFilter = append(relay.RejectFilter, common.RejectFilter)
 
 	// Blossom
 
 	fs := afero.NewOsFs()
-	blossomPath := fmt.Sprintf("%s/media", data)
+	blossomPath := common.GetDataDir("media")
 
 	if err := fs.MkdirAll(blossomPath, 0755); err != nil {
 		log.Fatal("🚫 error creating blossom path:", err)
 	}
 
-	bldb := &eventstore.BadgerBackend{Path: fmt.Sprintf("%s/blossom", data)}
+	bldb := &eventstore.BadgerBackend{Path: common.GetDataDir("blossom")}
 	if err := bldb.Init(); err != nil {
 		log.Fatal("Failed to initialize blossom backend:", err)
 	}
 
-	bl := blossom.New(relay, "https://"+url)
+	bl := blossom.New(relay, "https://"+common.RELAY_URL)
 
 	bl.Store = blossom.EventStoreBlobIndexWrapper{Store: bldb, ServiceURL: bl.ServiceURL}
 
@@ -200,7 +120,7 @@ func main() {
 			return true, "file too large", 413
 		}
 
-		if auth == nil || !isBlossomAllowed(auth.PubKey) {
+		if auth == nil || !common.HasAccess(auth.PubKey) {
 			return true, "unauthorized", 403
 		}
 
@@ -208,7 +128,7 @@ func main() {
 	})
 
 	bl.RejectGet = append(bl.RejectGet, func(ctx context.Context, auth *nostr.Event, sha256 string) (bool, string, int) {
-		if auth == nil || !isBlossomAllowed(auth.PubKey) {
+		if auth == nil || !common.HasAccess(auth.PubKey) {
 			return true, "unauthorized", 403
 		}
 
@@ -216,7 +136,7 @@ func main() {
 	})
 
 	bl.RejectList = append(bl.RejectList, func(ctx context.Context, auth *nostr.Event, pubkey string) (bool, string, int) {
-		if auth == nil || !isBlossomAllowed(auth.PubKey) {
+		if auth == nil || !common.HasAccess(auth.PubKey) {
 			return true, "unauthorized", 403
 		}
 
@@ -224,7 +144,7 @@ func main() {
 	})
 
 	bl.RejectDelete = append(bl.RejectDelete, func(ctx context.Context, auth *nostr.Event, sha256 string) (bool, string, int) {
-		if auth == nil || !isBlossomAllowed(auth.PubKey) {
+		if auth == nil || !common.HasAccess(auth.PubKey) {
 			return true, "unauthorized", 403
 		}
 
@@ -242,13 +162,13 @@ func main() {
 
 	// Create server
 	srv := &http.Server{
-		Addr:    fmt.Sprintf(":%s", port),
+		Addr:    fmt.Sprintf(":%s", common.PORT),
 		Handler: relay,
 	}
 
 	// Start server in goroutine
 	go func() {
-		fmt.Printf("running on :%s\n", port)
+		fmt.Printf("running on :%s\n", common.PORT)
 		if err := srv.ListenAndServe(); err != http.ErrServerClosed {
 			log.Printf("HTTP server error: %v\n", err)
 		}
