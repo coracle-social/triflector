@@ -17,7 +17,7 @@ The following environment variables are optional:
 - `AUTH_WHITELIST` - a comma-separate list of pubkeys to allow access for
 - `AUTH_RESTRICT_USER` - whether to only accept events published by authenticated users. Defaults to `true`. If `false`, no AUTH challenge will be sent.
 - `AUTH_RESTRICT_AUTHOR` - whether to only accept events signed by authorized users. Defaults to `false`.
-- `DATA_DIR` - the directory where you would like to store database files and media. Defaults to `./data`, and is set to `/app/data` when containerized.
+- `DATA_DIR` - the directory where you would like to store database files and media. Defaults to `./data`, and is set to `/tmp/data` when containerized.
 
 ## Access control
 
@@ -50,7 +50,7 @@ Frith can be run using an OCI container:
 ```sh
 podman run -it \
   -p 3334:3334 \
-  -v ./data:/app/data \
+  -v ./data:/tmp/data \
   --env-file .env \
   ghcr.io/coracle-social/frith
 ```

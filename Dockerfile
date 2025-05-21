@@ -21,6 +21,6 @@ USER nonroot:nonroot
 
 EXPOSE 3334
 
-ENV DATA_DIR=/app/data
+ENV DATA_DIR=/tmp/data
 
 ENTRYPOINT ["/frith"]
